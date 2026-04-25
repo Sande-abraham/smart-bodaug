@@ -1,0 +1,101 @@
+{
+  "entities": {
+    "user": {
+      "title": "User Profile",
+      "description": "Unified user profile for customers, riders, and admins",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "role": { "type": "string", "enum": ["customer", "rider", "admin"] },
+        "status": { "type": "string", "enum": ["active", "pending", "suspended", "declined"] },
+        "role_requested": { "type": "string", "enum": ["customer", "rider", "admin"] },
+        "verification_status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+        "isApproved": { "type": "boolean" },
+        "phoneNumber": { "type": "string" },
+        "bikeType": { "type": "string" },
+        "numberPlate": { "type": "string" },
+        "isOnline": { "type": "boolean" },
+        "walletBalance": { "type": "number" },
+        "earnings": { "type": "number" },
+        "isOnTrip": { "type": "boolean" },
+        "lastLocationUpdate": { "type": "string", "format": "date-time" },
+        "lastKnownLocation": {
+          "type": "array",
+          "items": { "type": "number" }
+        },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "role", "status", "createdAt"]
+    },
+    "ride": {
+      "title": "Ride Request",
+      "description": "A ride request and active trip",
+      "type": "object",
+      "properties": {
+        "customerId": { "type": "string" },
+        "riderId": { "type": "string" },
+        "riderName": { "type": "string" },
+        "riderPhone": { "type": "string" },
+        "status": { "type": "string", "enum": ["REQUESTED", "ACCEPTED", "ARRIVED", "TRIP_STARTED", "COMPLETED", "CANCELLED"] },
+        "pickup": { "type": "string" },
+        "destination": { "type": "string" },
+        "pickupCoords": { "type": "array", "items": { "type": "number" } },
+        "destCoords": { "type": "array", "items": { "type": "number" } },
+        "fare": { "type": "number" },
+        "paymentMethod": { "type": "string", "enum": ["cash", "wallet"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "rider_application": {
+      "title": "Rider Application",
+      "description": "Application submitted by a customer to become a rider",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "nationalId": { "type": "string" },
+        "drivingPermit": { "type": "string" },
+        "bikeNumber": { "type": "string" },
+        "bodaType": { "type": "string" },
+        "status": { "type": "string", "enum": ["PENDING", "APPROVED", "REJECTED"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "reviewedBy": { "type": "string" },
+        "reviewedAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "notification": {
+      "title": "Notification",
+      "description": "System or transactional notification for users",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "type": { "type": "string", "enum": ["RIDER_APPLICATION", "RIDE_REQUEST", "SYSTEM", "LOYALTY"] },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "read": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
+    }
+  },
+  "firestore": {
+    "/users/{uid}": {
+      "schema": "user",
+      "description": "User profiles"
+    },
+    "/rides/{rideId}": {
+      "schema": "ride",
+      "description": "Active and past ride requests"
+    },
+    "/rider_applications/{appId}": {
+      "schema": "rider_application",
+      "description": "Pending and processed rider applications"
+    },
+    "/notifications/{notifId}": {
+      "schema": "notification",
+      "description": "User notifications"
+    }
+  }
+}

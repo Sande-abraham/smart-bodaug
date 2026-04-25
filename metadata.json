@@ -1,0 +1,5 @@
+{
+  "name": "BodaSmart",
+  "description": "Fuel optimization and profit maximization system for boda-boda riders in Kampala, Uganda.",
+  "requestFramePermissions": ["geolocation"]
+}
