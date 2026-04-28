@@ -1,13 +1,100 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>My Google AI Studio App</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
-</html>
+import React from 'react';
+import { motion, AnimatePresence } from 'motion/react';
+import { MapPin, Navigation, Banknote, ThumbsUp, X, Wallet } from 'lucide-react';
+import { RideRequest } from '../types';
 
+interface AcceptRideModalProps {
+  request: RideRequest;
+  onAccept: () => void;
+  onDecline: () => void;
+}
+
+export default function AcceptRideModal({ request, onAccept, onDecline }: AcceptRideModalProps) {
+  return (
+    <AnimatePresence>
+      <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+        <motion.div
+          initial={{ scale: 0.9, opacity: 0, y: 20 }}
+          animate={{ scale: 1, opacity: 1, y: 0 }}
+          exit={{ scale: 0.9, opacity: 0, y: 20 }}
+          className="bg-white rounded-[32px] w-full max-w-sm overflow-hidden shadow-2xl border border-gray-100"
+        >
+          <div className="bg-brand-yellow p-6 relative overflow-hidden">
+            {/* Animated bg pattern */}
+            <div className="absolute inset-0 opacity-10 pointer-events-none">
+              <div className="absolute top-0 left-0 w-full h-full repeating-conic-gradient" />
+            </div>
+            
+            <div className="relative z-10 flex justify-between items-start">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-black/50">Incoming Ride</p>
+                <h2 className="text-2xl font-black text-black mt-1">NEW REQUEST</h2>
+              </div>
+              <button 
+                onClick={onDecline}
+                className="w-10 h-10 rounded-full bg-black/10 flex items-center justify-center hover:bg-black/20 transition-colors"
+              >
+                <X className="w-5 h-5 text-black" />
+              </button>
+            </div>
+          </div>
+
+          <div className="p-6 space-y-6">
+            <div className="space-y-4">
+              <div className="flex gap-4">
+                <div className="flex flex-col items-center gap-1 mt-1">
+                  <div className="w-3 h-3 rounded-full bg-blue-500 border-2 border-white shadow-sm" />
+                  <div className="w-0.5 h-8 bg-dashed-border border-l-2 border-gray-200 border-dashed" />
+                  <MapPin className="w-4 h-4 text-brand-yellow" />
+                </div>
+                <div className="space-y-4 flex-1">
+                  <div>
+                    <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Pickup</p>
+                    <p className="text-sm font-bold text-gray-900 line-clamp-1">{request.pickup}</p>
+                  </div>
+                  <div>
+                    <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Destination</p>
+                    <p className="text-sm font-bold text-gray-900 line-clamp-1">{request.destination}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-gray-50 p-3 rounded-2xl border border-gray-100">
+                <p className="text-[8px] font-black text-gray-400 uppercase mb-1">Fare</p>
+                <div className="flex items-center gap-1.5">
+                  <Banknote className="w-3 h-3 text-green-600" />
+                  <p className="text-sm font-black text-gray-900">{request.fare.toLocaleString()} UGX</p>
+                </div>
+              </div>
+              <div className="bg-gray-50 p-3 rounded-2xl border border-gray-100">
+                <p className="text-[8px] font-black text-gray-400 uppercase mb-1">Trip Distance</p>
+                <div className="flex items-center gap-1.5">
+                  <Navigation className="w-3 h-3 text-blue-600" />
+                  <p className="text-sm font-black text-gray-900">{request.estDistance.toFixed(1)} km</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={onDecline}
+                className="flex-1 py-4 px-6 rounded-2xl bg-gray-100 text-gray-500 font-bold text-sm hover:bg-gray-200 transition-all active:scale-95"
+              >
+                Ignore
+              </button>
+              <button
+                onClick={onAccept}
+                className="flex-[2] py-4 px-6 rounded-2xl bg-brand-yellow text-black font-black text-sm shadow-lg shadow-brand-yellow/20 flex items-center justify-center gap-2 hover:bg-brand-yellow/90 transition-all active:scale-95"
+              >
+                <ThumbsUp className="w-4 h-4" />
+                ACCEPT RIDE
+              </button>
+            </div>
+          </div>
+        </motion.div>
+      </div>
+    </AnimatePresence>
+  );
+}

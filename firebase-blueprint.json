@@ -1,101 +1,336 @@
-{
-  "entities": {
-    "user": {
-      "title": "User Profile",
-      "description": "Unified user profile for customers, riders, and admins",
-      "type": "object",
-      "properties": {
-        "uid": { "type": "string" },
-        "email": { "type": "string" },
-        "displayName": { "type": "string" },
-        "role": { "type": "string", "enum": ["customer", "rider", "admin"] },
-        "status": { "type": "string", "enum": ["active", "pending", "suspended", "declined"] },
-        "role_requested": { "type": "string", "enum": ["customer", "rider", "admin"] },
-        "verification_status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
-        "isApproved": { "type": "boolean" },
-        "phoneNumber": { "type": "string" },
-        "bikeType": { "type": "string" },
-        "numberPlate": { "type": "string" },
-        "isOnline": { "type": "boolean" },
-        "walletBalance": { "type": "number" },
-        "earnings": { "type": "number" },
-        "isOnTrip": { "type": "boolean" },
-        "lastLocationUpdate": { "type": "string", "format": "date-time" },
-        "lastKnownLocation": {
-          "type": "array",
-          "items": { "type": "number" }
-        },
-        "createdAt": { "type": "string", "format": "date-time" }
-      },
-      "required": ["uid", "email", "role", "status", "createdAt"]
-    },
-    "ride": {
-      "title": "Ride Request",
-      "description": "A ride request and active trip",
-      "type": "object",
-      "properties": {
-        "customerId": { "type": "string" },
-        "riderId": { "type": "string" },
-        "riderName": { "type": "string" },
-        "riderPhone": { "type": "string" },
-        "status": { "type": "string", "enum": ["REQUESTED", "ACCEPTED", "ARRIVED", "TRIP_STARTED", "COMPLETED", "CANCELLED"] },
-        "pickup": { "type": "string" },
-        "destination": { "type": "string" },
-        "pickupCoords": { "type": "array", "items": { "type": "number" } },
-        "destCoords": { "type": "array", "items": { "type": "number" } },
-        "fare": { "type": "number" },
-        "paymentMethod": { "type": "string", "enum": ["cash", "wallet"] },
-        "createdAt": { "type": "string", "format": "date-time" }
-      }
-    },
-    "rider_application": {
-      "title": "Rider Application",
-      "description": "Application submitted by a customer to become a rider",
-      "type": "object",
-      "properties": {
-        "userId": { "type": "string" },
-        "userName": { "type": "string" },
-        "userEmail": { "type": "string" },
-        "nationalId": { "type": "string" },
-        "drivingPermit": { "type": "string" },
-        "bikeNumber": { "type": "string" },
-        "bodaType": { "type": "string" },
-        "status": { "type": "string", "enum": ["PENDING", "APPROVED", "REJECTED"] },
-        "createdAt": { "type": "string", "format": "date-time" },
-        "reviewedBy": { "type": "string" },
-        "reviewedAt": { "type": "string", "format": "date-time" }
-      }
-    },
-    "notification": {
-      "title": "Notification",
-      "description": "System or transactional notification for users",
-      "type": "object",
-      "properties": {
-        "userId": { "type": "string" },
-        "type": { "type": "string", "enum": ["RIDER_APPLICATION", "RIDE_REQUEST", "SYSTEM", "LOYALTY"] },
-        "title": { "type": "string" },
-        "message": { "type": "string" },
-        "read": { "type": "boolean" },
-        "createdAt": { "type": "string", "format": "date-time" }
-      }
+import { Rider, RouteOptimizationResult, GeoLocation, TrafficAlert, FuelPriceAlert, Type } from "../types";
+
+// Helper to call our secure server-side proxy
+async function callGeminiProxy(contents: any, config?: any, model: string = "gemini-3-flash-preview") {
+  try {
+    const response = await fetch('/api/gemini', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contents, config, model }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || `Server responded with ${response.status}`);
     }
-  },
-  "firestore": {
-    "/users/{uid}": {
-      "schema": "user",
-      "description": "User profiles"
-    },
-    "/rides/{rideId}": {
-      "schema": "ride",
-      "description": "Active and past ride requests"
-    },
-    "/rider_applications/{appId}": {
-      "schema": "rider_application",
-      "description": "Pending and processed rider applications"
-    },
-    "/notifications/{notifId}": {
-      "schema": "notification",
-      "description": "User notifications"
-    }
+
+    const data = await response.json();
+    return data; // contains { text: "..." }
+  } catch (error: any) {
+    console.error("Gemini Proxy Call Failed:", error);
+    return { text: "{}" };
   }
 }
+
+// Fallback data for Kampala context
+const KAMPALA_FALLBACK_STATIONS: FuelPriceAlert[] = [
+  { station: "Shell Kampala Road", price: 5650, trend: 'stable' as const, distance: "0.8 km" },
+  { station: "TotalEnergies Jinja Rd", price: 5580, trend: 'down' as const, distance: "1.2 km" },
+  { station: "Stabex Wandegeya", price: 5450, trend: 'stable' as const, distance: "2.1 km" }
+];
+
+const KAMPALA_FALLBACK_ALERTS: TrafficAlert[] = [
+  { location: "Jinja Road", condition: "Heavy Jam", action: "Use Mukwano Road bypass", intensity: 'high' as const },
+  { location: "Entebbe Road", condition: "Slow Moving", action: "Use back paths through Katwe", intensity: 'medium' as const },
+  { location: "Makerere Hill Rd", condition: "Clear", action: "Good for speed", intensity: 'low' as const }
+];
+
+const KAMPALA_FALLBACK_SUGGESTIONS = [
+  "Ntinda Complex, Kampala", 
+  "Kiwatule Trading Center", 
+  "Makerere Main Gate", 
+  "Kikoni Proper", 
+  "Texas Lounge, Kansanga", 
+  "Mukwano Mall, Central",
+  "Acacia Mall, Kisementi",
+  "Village Mall, Bugolobi",
+  "Garden City Shopping Mall",
+  "Freedom City Mall, Najjanankumbi",
+  "Kyambogo University",
+  "Mulago Hospital",
+  "Bweyogere",
+  "Kireka Market",
+  "Munyonyo Commonwealth Resort",
+  "Ggaba Landing Site",
+  "Kalerwe Market",
+  "Wandegeya Market"
+];
+
+// Simple in-memory cache
+const suggestionCache: Record<string, string[]> = {};
+const routeCache: Record<string, RouteOptimizationResult> = {};
+
+export async function getFuelPriceAlerts(location: GeoLocation | null): Promise<FuelPriceAlert[]> {
+  try {
+    const locationString = location ? `${location.latitude}, ${location.longitude}` : "Kampala Central";
+    
+    const response = await callGeminiProxy(
+      `
+        As an AI fuel price tracker for boda-boda riders in Kampala, Uganda.
+        Current location: ${locationString}.
+        Find 3 petrol stations nearby with competitive fuel prices (UGX).
+        Prices in 2026 are around 6,000 - 9,500 UGX.
+      `,
+      {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            fuelAlerts: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  station: { type: Type.STRING },
+                  price: { type: Type.NUMBER },
+                  trend: { type: Type.STRING, enum: ['up', 'down', 'stable'] },
+                  distance: { type: Type.STRING }
+                },
+                required: ["station", "price", "trend", "distance"]
+              }
+            }
+          },
+          required: ["fuelAlerts"]
+        }
+      }
+    );
+
+    const result = JSON.parse(response.text || "{}");
+    return result.fuelAlerts || KAMPALA_FALLBACK_STATIONS;
+  } catch (error) {
+    console.warn("Gemini Error (Fuel Alerts):", error);
+    return KAMPALA_FALLBACK_STATIONS;
+  }
+}
+
+export async function getTrafficAlerts(location: GeoLocation | null): Promise<TrafficAlert[]> {
+  try {
+    const locationString = location ? `${location.latitude}, ${location.longitude}` : "Kampala Central";
+    
+    const response = await callGeminiProxy(
+      `
+        As an AI traffic analyst for boda-boda riders in Kampala, Uganda (2026).
+        Current location: ${locationString}.
+        Provide 3 real-time traffic alerts for major roads like Jinja Rd, Wandegeya, Entebbe Rd, or Northern Bypass.
+      `,
+      {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            alerts: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  location: { type: Type.STRING },
+                  condition: { type: Type.STRING },
+                  action: { type: Type.STRING },
+                  intensity: { type: Type.STRING, enum: ['low', 'medium', 'high'] }
+                },
+                required: ["location", "condition", "action", "intensity"]
+              }
+            }
+          },
+          required: ["alerts"]
+        }
+      }
+    );
+
+    const result = JSON.parse(response.text || "{}");
+    return result.alerts || KAMPALA_FALLBACK_ALERTS;
+  } catch (error) {
+    console.warn("Gemini Error (Traffic Alerts):", error);
+    return KAMPALA_FALLBACK_ALERTS;
+  }
+}
+
+export async function getDestinationSuggestions(
+  input: string,
+  currentLocation: GeoLocation | null
+): Promise<string[]> {
+  if (!input || input.length < 2) return [];
+  
+  const cacheKey = input.toLowerCase().trim();
+  if (suggestionCache[cacheKey]) return suggestionCache[cacheKey];
+  
+  try {
+    const locationString = currentLocation ? `${currentLocation.latitude}, ${currentLocation.longitude}` : "Kampala Central";
+    
+    const response = await callGeminiProxy(
+      `As an expert Kampala navigator, suggest 5 specific destination names and locations in Kampala starting with or related to "${input}". Include landmarks or major roads if relevant. Current context location: ${locationString}. Provide only the names of the places.`,
+      {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            suggestions: {
+              type: Type.ARRAY,
+              items: { type: Type.STRING }
+            }
+          },
+          required: ["suggestions"]
+        }
+      }
+    );
+
+    const result = JSON.parse(response.text || "{}");
+    const suggestions = result.suggestions || KAMPALA_FALLBACK_SUGGESTIONS.filter(s => s.toLowerCase().includes(input.toLowerCase()));
+    
+    if (result.suggestions && result.suggestions.length > 0) {
+      suggestionCache[cacheKey] = suggestions;
+    }
+    return suggestions;
+  } catch (error) {
+    return KAMPALA_FALLBACK_SUGGESTIONS.filter(s => s.toLowerCase().includes(input.toLowerCase()));
+  }
+}
+
+export async function getRouteOptimization(
+  start: string,
+  end: string,
+  rider: Rider,
+  options: {
+    fuelPrice?: number;
+    demandLevel?: 'low' | 'normal' | 'high';
+    timeOfDay?: string;
+  } = {}
+): Promise<RouteOptimizationResult> {
+  const { fuelPrice = 9200, demandLevel = 'normal', timeOfDay = new Date().toLocaleTimeString() } = options;
+  
+  const cacheKey = `${start}-${end}`.toLowerCase().trim();
+  if (routeCache[cacheKey]) return routeCache[cacheKey];
+  
+  try {
+    const response = await callGeminiProxy(
+      `
+        You are the '2026 Kampala Boda-Boda Route Master'. Maximize rider profit for a trip:
+        - Origin: "${start}"
+        - Destination: "${end}"
+        - Context: 2026 high fuel cost (${fuelPrice} UGX), heavy "Kampala Jam", and the 7 Hills terrain.
+        - Consideration: Idling in traffic and high-RPM climbing on hills like Kololo or Old Kampala cost significantly more fuel.
+        
+        Route 1 (Best Fuel): Flat terrain, avoid jam, minimize idling.
+        Route 2 (Alternative): fastest but potentially higher fuel/hill demand.
+      `,
+      {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            suggestions: { type: Type.ARRAY, items: { type: Type.STRING } },
+            best_route: {
+              type: Type.OBJECT,
+              properties: {
+                description: { type: Type.STRING },
+                fuel_litres: { type: Type.NUMBER },
+                cost: { type: Type.NUMBER },
+                time_minutes: { type: Type.NUMBER },
+                distance: { type: Type.NUMBER },
+                via_road: { type: Type.STRING },
+                traffic_level: { type: Type.STRING },
+                reason: { type: Type.STRING },
+                profit_saved: { type: Type.NUMBER },
+                suggested_fare_range: {
+                  type: Type.OBJECT,
+                  properties: { min: { type: Type.NUMBER }, max: { type: Type.NUMBER } },
+                  required: ["min", "max"]
+                },
+                waypoints: {
+                  type: Type.ARRAY,
+                  items: { type: Type.ARRAY, items: { type: Type.NUMBER } }
+                }
+              },
+              required: ["description", "fuel_litres", "cost", "time_minutes", "distance", "reason", "waypoints", "suggested_fare_range"]
+            },
+            alternative_routes: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  description: { type: Type.STRING },
+                  fuel_litres: { type: Type.NUMBER },
+                  cost: { type: Type.NUMBER },
+                  time_minutes: { type: Type.NUMBER },
+                  distance: { type: Type.NUMBER },
+                  reason: { type: Type.STRING },
+                  waypoints: {
+                    type: Type.ARRAY,
+                    items: { type: Type.ARRAY, items: { type: Type.NUMBER } }
+                  },
+                  suggested_fare_range: {
+                    type: Type.OBJECT,
+                    properties: { min: { type: Type.NUMBER }, max: { type: Type.NUMBER } },
+                    required: ["min", "max"]
+                  }
+                },
+                required: ["description", "fuel_litres", "cost", "time_minutes", "distance", "reason", "waypoints", "suggested_fare_range"]
+              }
+            },
+            navigation_steps: { type: Type.ARRAY, items: { type: Type.STRING } },
+            distance: { type: Type.NUMBER }
+          },
+          required: ["suggestions", "best_route", "alternative_routes", "navigation_steps", "distance"]
+        }
+      }
+    );
+
+    const rawResult = JSON.parse(response.text || "{}");
+    const result = {
+      ...rawResult,
+      distance: rawResult.best_route.distance || rawResult.distance || 0
+    };
+    
+    routeCache[cacheKey] = result;
+    return result;
+  } catch (error) {
+    console.error("Gemini Error (Route Optimization):", error);
+    // Generic fallback implementation...
+    const baseDist = Math.max(3, (end.length % 10) + 2); 
+    return {
+      suggestions: [end],
+      best_route: {
+        description: `AI Fuel Saver Route`,
+        fuel_litres: baseDist * 0.035,
+        cost: Math.round(baseDist * 1800),
+        time_minutes: Math.round(baseDist * 4),
+        distance: baseDist,
+        via_road: "Back Roads & Flat Paths",
+        traffic_level: "Low",
+        reason: "Primary choice to avoid hill climbing and idling.",
+        waypoints: [[0.2983, 32.6015], [0.3015, 32.6035], [0.2975, 32.5970]],
+        suggested_fare_range: { min: 4000, max: 8000 }
+      },
+      alternative_routes: [],
+      navigation_steps: ["Start", "Avoid main road", "Arrive"],
+      distance: baseDist
+    };
+  }
+}
+
+export async function getSmartSuggestions(trips: any[]): Promise<string[]> {
+  try {
+    const response = await callGeminiProxy(
+      `Analyze these recent trips for a boda-boda rider in Kampala and provide 3 actionable profit/fuel suggestions: ${JSON.stringify(trips)}`,
+      {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            suggestions: {
+              type: Type.ARRAY,
+              items: { type: Type.STRING }
+            }
+          },
+          required: ["suggestions"]
+        }
+      }
+    );
+
+    const result = JSON.parse(response.text || "{}");
+    return result.suggestions || ["Minimize idling at Jinja Rd lights", "Shift gears early on hill climbs"];
+  } catch (error) {
+    return ["Avoid high revving", "Plan rest breaks outside peak jam hours"];
+  }
+}
+

@@ -1,5 +1,7 @@
 {
-  "name": "BodaSmart",
-  "description": "Fuel optimization and profit maximization system for boda-boda riders in Kampala, Uganda.",
-  "requestFramePermissions": ["geolocation"]
+  "name": "Remix: BodaSmart",
+  "description": "Dynamic ride-booking and fuel optimization system for boda-boda riders and customers in Kampala, Uganda. Features real-time rider matching and live tracking.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
 }
