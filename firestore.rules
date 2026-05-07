@@ -1,10 +1,132 @@
-import {StrictMode} from 'react';
-import {createRoot} from 'react-dom/client';
-import App from './App.tsx';
-import './index.css';
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // 0. Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-);
+    // 0.2 Public test connection
+    match /test/connection {
+      allow read: if true;
+    }
+
+    // 0.3 Primitives
+    function isSignedIn() { return request.auth != null; }
+    function isVerified() { return isSignedIn() && request.auth.token.email_verified == true; }
+    
+    // Updated to include BOTH admin emails for testing
+    function isSuperAdmin() { 
+      return isSignedIn() && (
+        request.auth.token.email == 'abrahamsande256@gmail.com' || 
+        request.auth.token.email == 'peaceshalom172@gmail.com' ||
+        request.auth.token.email == 'abrahamsandeug@gmail.com'
+      );
+    }
+
+    // Safer isAdmin that defaults to customer and avoids get() if possible
+    function isAdmin() { 
+      return isSignedIn() && (
+        isSuperAdmin() || 
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'customer') == 'admin')
+      ); 
+    }
+    
+    function isOwner(uid) { return isSignedIn() && request.auth.uid == uid; }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+
+    // 2. User Profiles
+    match /users/{uid} {
+      function isValidUser(data) {
+        return data.uid == uid &&
+               data.email is string &&
+               data.role in ['customer', 'rider', 'admin'];
+      }
+
+      // Allow all signed-in users to read profiles for discovery and interaction
+      allow read: if isSignedIn();
+      
+      // List rules: MUST match the queries in the app.
+      allow list: if isSignedIn() && (
+        isAdmin() || 
+        (resource.data.role == 'rider' && resource.data.isOnline == true) ||
+        resource.data.uid == request.auth.uid
+      );
+      
+      allow create: if (isOwner(uid) || isAdmin()) && isValidUser(incoming());
+
+      allow update: if (isOwner(uid) && (
+        // Action: Rider toggles, Profile Updates, or Application Status
+        (incoming().diff(existing()).affectedKeys().hasAny(['isOnline', 'lastKnownLocation', 'lastLocationUpdate', 'isOnTrip', 'displayName', 'phoneNumber', 'bikeType', 'numberPlate', 'fuelConsumptionRate', 'tankCapacity', 'earnings', 'walletBalance', 'status', 'role_requested', 'verification_status']))
+      )) || isAdmin();
+
+      allow delete: if isAdmin();
+    }
+
+    // 2.1 Notifications
+    match /notifications/{notifId} {
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin()) && (incoming().diff(existing()).affectedKeys().hasOnly(['read']) || isAdmin());
+      allow delete: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+    }
+
+    // 2.2 Rider Applications
+    match /rider_applications/{appId} {
+      allow read: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
+      allow create: if isAdmin() || (isSignedIn() && request.resource.data.userId == request.auth.uid);
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // 3. Ride Requests
+    match /rides/{rideId} {
+      function isValidRide(data) {
+        // Return if customerId is a string (if present) and status is valid (if present)
+        return (data.get('customerId', 'placeholder') is string) && 
+               (data.get('status', 'SEARCHING') in ['SEARCHING', 'REQUESTED', 'ACCEPTED', 'ARRIVING', 'ARRIVED', 'TRIP_STARTED', 'COMPLETED', 'CANCELLED']);
+      }
+
+      // Allow all parties involved or admins to read
+      allow read: if isSignedIn();
+      
+      // List explicitly evaluates resource.data to match queries
+      allow list: if isSignedIn();
+      
+      allow create: if isSignedIn() && incoming().customerId == request.auth.uid;
+
+      allow update: if isSignedIn() && (
+        isAdmin() || 
+        resource.data.customerId == request.auth.uid || 
+        resource.data.riderId == request.auth.uid ||
+        resource.data.status == 'SEARCHING' ||
+        resource.data.status == 'REQUESTED'
+      );
+    }
+
+    // 4. Trip History (Logs)
+    match /trips/{tripId} {
+      allow get: if isSignedIn() && (resource.data.uid == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.uid == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
+    }
+
+    // 5. Fuel Stations
+    match /fuel_stations/{stationId} {
+      allow read, list: if isSignedIn();
+      allow create: if isSignedIn(); 
+      allow update: if isSignedIn() && (
+        incoming().diff(existing()).affectedKeys().hasAny(['avgPrice', 'reportCount', 'lastUpdated'])
+      ) || isAdmin();
+    }
+
+    // 6. Fuel Reports
+    match /fuel_reports/{reportId} {
+      allow read, list: if isSignedIn();
+      allow create: if isSignedIn() && incoming().userId == request.auth.uid;
+    }
+  }
+}

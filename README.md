@@ -35,3 +35,26 @@ Open **Microsoft Edge** and go to:
 - **Frontend**: React + Vite + Tailwind CSS
 - **Backend**: Firebase (Cloud Firestore & Auth)
 - **AI**: Google Gemini API
+
+## Deployment Guide
+
+This app can be hosted on platforms like **Netlify**, **Vercel**, or **GitHub Pages**.
+
+### 1. Build the App
+Before deploying, you MUST create a production build. This converts the TypeScript code into optimized JavaScript that browsers can understand.
+```bash
+npm run build
+```
+
+### 2. Deployment Settings
+When prompted by your hosting provider, use these settings:
+- **Build Command**: `npm run build`
+- **Publish/Output Directory**: `dist`
+
+### 3. Environment Variables
+You must set your **GEMINI_API_KEY** in the hosting platform's dashboard (Environment Variables section) for the AI features to work.
+
+### 4. Hosting Notes
+- **Netlify**: Use the included `netlify.toml`.
+- **Vercel**: Use the included `vercel.json`.
+- **Backend Service**: Note that the Gemini AI features use a proxy in `server.ts` which requires a Node.js runtime. If you use static hosting (like GitHub Pages), the AI features will need to be migrated to a serverless function.
